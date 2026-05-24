@@ -1,0 +1,97 @@
+Screen {
+    background: $background;
+    color: $foreground;
+    layout: vertical;
+}
+
+#topbar { height: 1; padding: 1 2 0 2; }
+#main { height: 1fr; padding: 1 2; }
+
+/* ---- sidebar -------------------------------------------------------------- */
+#sidebar { width: 40; height: 1fr; margin: 0 2 0 0; }
+
+.section {
+    height: 1;
+    color: $text-muted;
+    text-style: bold;
+    padding: 0 0 0 1;
+}
+
+#list {
+    height: 1fr;
+    background: transparent;
+    border: round $surface-lighten-2;
+    padding: 0;
+}
+
+ListView { background: transparent; }
+
+AccountRow {
+    height: auto;
+    padding: 1 1 1 2;
+    background: transparent;
+    border-left: outer $background;
+}
+
+AccountRow .row-sub { color: $text-muted; }
+
+ListView > AccountRow.-highlight { background: $surface-lighten-1; border-left: outer $primary; }
+ListView:focus > AccountRow.-highlight { background: $surface-lighten-2; border-left: outer $primary; }
+
+#sidebar-actions { height: auto; padding: 1 0 0 0; }
+#sidebar-actions Button { margin: 0 1 0 0; }
+
+.flat {
+    text-align: center;
+    content-align: center middle;
+    background: $surface-lighten-1;
+    color: $foreground;
+    border-top: tall $surface-lighten-2;
+    border-bottom: tall $surface-darken-1;
+}
+.flat:hover { background: $surface-lighten-2; }
+.flat:focus { text-style: bold; }
+
+/* ---- detail pane ---------------------------------------------------------- */
+#detail {
+    width: 1fr;
+    height: 1fr;
+    background: $surface;
+    border: round $surface-lighten-2;
+}
+
+#detail-body { height: 1fr; padding: 1 3; }
+#detail-actions { height: auto; padding: 1 2 1 2; }
+#detail-actions Button { margin: 0 1 0 0; }
+#detail-actions:disabled { opacity: 40%; }
+
+/* ---- modals --------------------------------------------------------------- */
+ConfirmScreen, InputScreen, AddMenuScreen, LoginScreen, SettingsScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+#dialog {
+    width: 66;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+    border: round $primary;
+}
+
+#dialog .prompt { height: auto; padding: 0 0 1 0; color: $foreground; }
+#dialog .dim-text { color: $text-muted; }
+#dialog .warn-text { color: $warning; }
+#dialog .error-text { color: $error; }
+#dialog Input { margin: 0 0 1 0; }
+#dialog .menu { width: 100%; margin: 0 0 1 0; }
+#dialog Label { color: $text-muted; padding: 1 0 0 0; }
+#dialog .switch-label { padding: 1 0 0 1; color: $foreground; }
+#dialog Select { margin: 0 0 1 0; }
+
+.setting-row { height: auto; }
+
+#login-status { height: auto; padding: 0 0 1 0; }
+
+.buttons { height: auto; align-horizontal: right; padding: 1 0 0 0; }
+.buttons Button { margin: 0 0 0 2; }
