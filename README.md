@@ -72,14 +72,17 @@ Midnight, for instance:
 
 ## How switching actually works
 
-Claude Code keeps your login in two files:
+Claude Code keeps your login in two places:
 
-- `~/.claude/.credentials.json` — the OAuth tokens
+- the OAuth tokens — `~/.claude/.credentials.json` on Linux and Windows; the
+  **macOS Keychain** (service `Claude Code-credentials`) on Mac
 - `~/.claude.json` — everything else, including *which account you are* (`oauthAccount`)
 
-Switching writes the chosen account's tokens into the first file and its identity into the
-second, and leaves everything else alone — your MCP server logins, project history, and
-settings all stay put. Each write is atomic, and the previous state is backed up first to
+Switching writes the chosen account's tokens into the first location and its identity into
+the second, and leaves everything else alone — your MCP server logins, project history, and
+settings all stay put. On macOS, CAM shells out to `security add-generic-password` to
+update the Keychain entry (you may get a one-time access prompt the first time). Each
+write is atomic, and the previous state is backed up first to
 `~/.claude-account-manager/backups/`.
 
 One thing to know: a Claude Code session that's already open is holding the old account in
@@ -114,8 +117,9 @@ tests/
 
 ## Notes
 
-- Developed and tested on Windows. It should run anywhere Python and a terminal do; I just
-  haven't put it through macOS or Linux yet.
+- Runs on Windows, macOS, and Linux. On macOS, credentials live in the Keychain instead
+  of a file, and CAM reads/writes them via the `security` CLI — same entry Claude Code
+  uses, so the two stay interoperable.
 
 Screenshots above are generated straight from the app (`python cam.py`, then the screen is
 exported to SVG) — see `assets/`.

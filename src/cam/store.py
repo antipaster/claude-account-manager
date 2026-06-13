@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -34,8 +34,67 @@ def _write_config(obj: dict) -> None:  # preserve Claude Code's 2-space indent
     _atomic_write(config.CONFIG_PATH, json.dumps(obj, ensure_ascii=False, indent=2))
 
 
-def _write_creds(obj: dict) -> None:  # preserve Claude Code's minified format
-    _atomic_write(config.CREDS_PATH, json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
+# --- live credentials (file on Linux/Windows, Keychain on macOS) ----------------
+def _keychain_read() -> dict | None:
+    """Read the Claude Code OAuth blob from the macOS Keychain. None if missing."""
+    try:
+        res = subprocess.run(
+            ["security", "find-generic-password",
+             "-a", config.KEYCHAIN_ACCOUNT, "-s", config.KEYCHAIN_SERVICE, "-w"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode != 0:
+        return None
+    text = res.stdout.strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+def _keychain_write(text: str) -> None:
+    try:
+        subprocess.run(
+            ["security", "add-generic-password", "-U",
+             "-a", config.KEYCHAIN_ACCOUNT, "-s", config.KEYCHAIN_SERVICE, "-w", text],
+            check=True, capture_output=True, text=True, timeout=15,
+        )
+    except FileNotFoundError as exc:
+        raise CamError("`security` not found — required for macOS Keychain access.") from exc
+    except subprocess.CalledProcessError as exc:
+        msg = (exc.stderr or exc.stdout or "").strip() or str(exc)
+        raise CamError(f"Failed to write credentials to macOS Keychain: {msg}") from exc
+
+
+def _read_creds() -> dict:
+    """Live OAuth blob. On macOS, falls back from the file to the Keychain so we
+    match Claude Code's precedence rule (an on-disk credentials file overrides)."""
+    if config.CREDS_PATH.exists():
+        try:
+            return _read_json(config.CREDS_PATH)
+        except Exception:
+            pass
+    if config.IS_MACOS:
+        data = _keychain_read()
+        if data is not None:
+            return data
+    return {}
+
+
+def _write_creds(obj: dict) -> None:
+    """Persist the live OAuth blob in Claude Code's minified shape, to whichever
+    backing store Claude Code is reading from on this platform."""
+    text = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    # If the file exists Claude Code reads it first, on every platform — keep it
+    # in sync. Otherwise on macOS write to the Keychain.
+    if config.CREDS_PATH.exists() or not config.IS_MACOS:
+        _atomic_write(config.CREDS_PATH, text)
+        return
+    _keychain_write(text)
 
 
 def _now_iso() -> str:
@@ -49,8 +108,7 @@ def _safe(name: str) -> str:
 # --- live (active) account ------------------------------------------------------
 def read_live() -> tuple[dict, dict]:
     cfg = _read_json(config.CONFIG_PATH) if config.CONFIG_PATH.exists() else {}
-    creds = _read_json(config.CREDS_PATH) if config.CREDS_PATH.exists() else {}
-    return cfg, creds
+    return cfg, _read_creds()
 
 
 def current_account() -> Account | None:
@@ -169,18 +227,26 @@ def delete_account(acct_id: str) -> None:
 def valid_access_token(acct: Account) -> str:
     """Usable access token for a *saved* account; refreshes + saves back if stale.
     Never call for the active account — use live_access_token() instead."""
-    from . import oauth
-
     co = acct.claude_oauth or {}
     exp = co.get("expiresAt") or 0
     if co.get("accessToken") and (exp / 1000 - time.time()) > 60:
         return co["accessToken"]
-
-    rt = co.get("refreshToken")
-    if not rt:
+    if not co.get("refreshToken"):
         if co.get("accessToken"):
             return co["accessToken"]
         raise CamError("No usable token stored for this account.")
+    return _refresh_and_persist(acct)["accessToken"]
+
+
+def _refresh_and_persist(acct: Account) -> dict:
+    """Force a token refresh and write the merged bundle back to the saved record.
+    If this account is the live one, also rewrites ~/.claude/.credentials.json."""
+    from . import oauth
+
+    co = acct.claude_oauth or {}
+    rt = co.get("refreshToken")
+    if not rt:
+        raise CamError("No refresh token stored for this account.")
 
     bundle = oauth.refresh_token(rt)
     merged = dict(co)
@@ -190,7 +256,22 @@ def valid_access_token(acct: Account) -> str:
     acct.claude_oauth = merged
     if acct.path:
         _atomic_write(acct.path, json.dumps(acct.to_dict(), ensure_ascii=False, indent=2))
-    return acct.claude_oauth["accessToken"]
+
+    cur = current_account()
+    if cur and cur.id == acct.id:
+        _, creds = read_live()
+        creds["claudeAiOauth"] = merged
+        _write_creds(creds)
+    return merged
+
+
+def refresh_account_token(acct_id: str) -> Account:
+    """User-triggered refresh: force a new access token via the stored refresh token."""
+    acct = get_account(acct_id)
+    if acct is None:
+        raise CamError(f"No saved account with id {acct_id!r}.")
+    _refresh_and_persist(acct)
+    return acct
 
 
 def build_identity_from_profile(profile: dict) -> dict:
@@ -254,8 +335,12 @@ def backup_live(tag: str = "backup") -> Path:
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     d = config.BACKUPS_DIR / f"{ts}-{tag}"
     d.mkdir(parents=True, exist_ok=True)
-    if config.CREDS_PATH.exists():
-        shutil.copy2(config.CREDS_PATH, d / "credentials.json")
+    creds = _read_creds()
+    if creds:
+        _atomic_write(
+            d / "credentials.json",
+            json.dumps(creds, ensure_ascii=False, separators=(",", ":")),
+        )
     if config.CONFIG_PATH.exists():
         cfg = _read_json(config.CONFIG_PATH)
         slim = {"oauthAccount": cfg.get("oauthAccount"), "userID": cfg.get("userID")}

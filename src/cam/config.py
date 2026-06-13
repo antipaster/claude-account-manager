@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import getpass
 import json
 import os
+import sys
 from pathlib import Path
 
 HOME = Path.home()
 
+IS_MACOS = sys.platform == "darwin"
+
+# On macOS, Claude Code stores the live OAuth credentials in the system Keychain
+# instead of an on-disk file. If `~/.claude/.credentials.json` exists, Claude Code
+# reads it in preference to the Keychain — we honor the same precedence.
+KEYCHAIN_SERVICE = "Claude Code-credentials"
+try:
+    KEYCHAIN_ACCOUNT = getpass.getuser()
+except Exception:
+    KEYCHAIN_ACCOUNT = os.environ.get("USER") or os.environ.get("USERNAME") or ""
 
 CONFIG_PATH = HOME / ".claude.json"
 CREDS_PATH = HOME / ".claude" / ".credentials.json"
