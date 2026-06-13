@@ -59,6 +59,14 @@ def _run(argv: list[str]) -> int:
         print(f"Switched to {a.label}. Start a new `claude` session to use it.")
         return 0
 
+    if cmd == "refresh":
+        if not rest:
+            sys.exit("usage: cam refresh <name>")
+        a = _resolve(rest[0])
+        store.refresh_account_token(a.id)
+        print(f"Refreshed token for {a.label}.")
+        return 0
+
     if cmd in ("rm", "remove", "delete"):
         if not rest:
             sys.exit("usage: cam rm <name>")

@@ -30,6 +30,7 @@ class CamApp(App[None]):
         Binding("r", "rename", "Rename"),
         Binding("d", "delete", "Delete"),
         Binding("u", "refresh_usage", "Usage"),
+        Binding("t", "refresh_token", "Refresh token"),
         Binding("comma", "settings", "Settings"),
         Binding("g,f5", "reload", "Reload"),
         Binding("q", "quit", "Quit"),
@@ -61,6 +62,7 @@ class CamApp(App[None]):
                     yield Button("Rename", id="btn-rename", classes="flat")
                     yield Button("Delete", id="btn-delete", variant="error")
                     yield Button("Refresh usage", id="btn-usage", classes="flat")
+                    yield Button("Refresh token", id="btn-token", classes="flat")
 
     def on_mount(self) -> None:
         for name in theme.THEME_ORDER:
@@ -191,6 +193,7 @@ class CamApp(App[None]):
             "btn-rename": self.action_rename,
             "btn-delete": self.action_delete,
             "btn-usage": self.action_refresh_usage,
+            "btn-token": self.action_refresh_token,
         }
         fn = dispatch.get(e.button.id)
         if fn:
@@ -307,6 +310,33 @@ class CamApp(App[None]):
         acct = self._selected()
         if acct:
             self._show_detail(acct, force_usage=True)
+
+    def action_refresh_token(self) -> None:
+        acct = self._selected()
+        if acct is None:
+            return
+        if not (acct.claude_oauth or {}).get("refreshToken"):
+            self.notify("No refresh token stored for this account.",
+                        severity="error", title="Refresh failed")
+            return
+        self.notify(f"Refreshing token for {acct.label}…")
+        self._do_refresh_token(acct.id)
+
+    @work(thread=True, exclusive=True, group="token")
+    def _do_refresh_token(self, acct_id: str) -> None:
+        try:
+            store.refresh_account_token(acct_id)
+        except Exception as exc:  # noqa: BLE001 — surfaced to user
+            self.app.call_from_thread(
+                self.notify, str(exc), severity="error", title="Refresh failed")
+            return
+        self.app.call_from_thread(self._after_token_refresh, acct_id)
+
+    def _after_token_refresh(self, acct_id: str) -> None:
+        self._usage.pop(acct_id, None)
+        self._usage_err.pop(acct_id, None)
+        self.reload(focus_id=acct_id)
+        self.notify("Token refreshed.", title="Refreshed")
 
     def action_settings(self) -> None:
         def done(result: dict | None) -> None:

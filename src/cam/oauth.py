@@ -11,14 +11,14 @@ from urllib.parse import urlencode
 
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # claude code public oauth client
 AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
-TOKEN_URL = "https://api.anthropic.com/v1/oauth/token"
+TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
-REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
+REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
 SCOPES = "org:create_api_key user:profile user:inference"
 
 BETA_HEADER = "oauth-2025-04-20"
-USER_AGENT = "claude-cli/2.0.0 (external, cli)"
+USER_AGENT = "claude-cli/2.1.128 (external, cli)"
 
 
 class ApiError(Exception):
@@ -26,7 +26,8 @@ class ApiError(Exception):
 
 
 def _request(url: str, *, method: str = "GET", token: str | None = None,
-             json_body: dict | None = None, timeout: int = 30) -> dict:
+             json_body: dict | None = None, form_body: dict | None = None,
+             timeout: int = 30) -> dict:
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     data = None
     if token:
@@ -36,6 +37,9 @@ def _request(url: str, *, method: str = "GET", token: str | None = None,
     if json_body is not None:
         data = json.dumps(json_body).encode()
         headers["Content-Type"] = "application/json"
+    elif form_body is not None:
+        data = urlencode(form_body).encode()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
 
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
@@ -83,7 +87,7 @@ def refresh_token(refresh_tok: str) -> dict:
     resp = _request(
         TOKEN_URL,
         method="POST",
-        json_body={"grant_type": "refresh_token", "refresh_token": refresh_tok, "client_id": CLIENT_ID},
+        form_body={"grant_type": "refresh_token", "refresh_token": refresh_tok, "client_id": CLIENT_ID},
     )
     return _to_bundle(resp)
 
@@ -118,7 +122,7 @@ def finish_login(pasted: str, verifier: str, state: str) -> dict:
     resp = _request(
         TOKEN_URL,
         method="POST",
-        json_body={
+        form_body={
             "grant_type": "authorization_code",
             "client_id": CLIENT_ID,
             "code": code.strip(),
