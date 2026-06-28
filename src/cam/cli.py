@@ -100,6 +100,8 @@ def _run(argv: list[str]) -> int:
         print(f"Exported {n} account{'' if n == 1 else 's'} to {dest}.")
         print("This file contains OAuth tokens — keep it private, "
               "and delete it once you've imported it on the other machine.")
+        print("Claude rotates refresh tokens on use, so an account works on one machine "
+              "at a time: import on the new machine, then stop using it on the old one.")
         return 0
 
     if cmd == "import":
@@ -112,6 +114,10 @@ def _run(argv: list[str]) -> int:
         if skipped:
             msg += f" Skipped {skipped} already present (use --force to overwrite)."
         print(msg)
+        if imported:
+            print("Next: `cam use <name>` to activate one. If you get a 401 / 'not logged "
+                  "in', the exported token was already rotated away — log that account in "
+                  "again with `claude` (/login), then `cam save`.")
         return 0
 
     print(__doc__)

@@ -121,6 +121,14 @@ cam import accounts.json
 makes one active — on macOS that writes straight into the Keychain, so Claude Code picks
 it up with no extra steps.
 
+> **One machine at a time.** Claude rotates refresh tokens on every use — refreshing a
+> token (on either machine, or just by using `claude`) revokes the previous one. So an
+> exported login keeps working on whichever machine refreshes it *first*; the other copy
+> goes stale and shows a 401 / "not logged in". Treat export/import as a **migration**:
+> move the account over, then stop using it on the old machine. If a freshly imported
+> account is already stale, just log it in once on the new machine (`claude`, `/login`)
+> and `cam save` to re-capture it there.
+
 > The export file contains live OAuth tokens. Keep it somewhere private and delete it once
 > you've imported it.
 

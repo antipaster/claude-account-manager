@@ -97,6 +97,22 @@ def test_export_bundle_shape(store_dir, tmp_path):
     assert "exported_at" in data
 
 
+def test_refresh_failure_surfaces_clean_error(store_dir, monkeypatch):
+    """A revoked/rotated refresh token must produce a readable CamError telling the
+    user to log in again — not an uncaught oauth.ApiError traceback."""
+    from cam import oauth
+
+    store._write_record(_make_account("a1", "a@x.com"))
+    monkeypatch.setattr(
+        oauth, "refresh_token",
+        lambda rt: (_ for _ in ()).throw(oauth.ApiError("HTTP 400: invalid_grant")),
+    )
+
+    with pytest.raises(store.CamError) as excinfo:
+        store.refresh_account_token("a1")
+    assert "log in" in str(excinfo.value).lower()
+
+
 def test_prune_backups_survives_overflow(store_dir):
     """Regression: _prune_backups called shutil.rmtree without importing shutil."""
     config.BACKUPS_DIR.mkdir(parents=True)

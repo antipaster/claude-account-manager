@@ -328,7 +328,19 @@ def _refresh_and_persist(acct: Account) -> dict:
     if not rt:
         raise CamError("No refresh token stored for this account.")
 
-    bundle = oauth.refresh_token(rt)
+    try:
+        bundle = oauth.refresh_token(rt)
+    except oauth.ApiError as exc:
+        msg = str(exc)
+        if "invalid_grant" in msg or "HTTP 400" in msg or "HTTP 401" in msg:
+            raise CamError(
+                "This account's refresh token is no longer valid. Claude rotates refresh "
+                "tokens on every use, so an account stays usable on only one machine at a "
+                "time — using it elsewhere (or refreshing) revokes this copy. Log in to "
+                "this account again with `claude` (/login), then run `cam save` to "
+                "re-capture it here."
+            ) from exc
+        raise CamError(f"Token refresh failed: {msg}") from exc
     merged = dict(co)
     for key, val in bundle.items():
         if val is not None:
