@@ -34,3 +34,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 cam = ["styles.tcss"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

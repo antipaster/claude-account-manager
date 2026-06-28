@@ -1,6 +1,25 @@
+"""cam — Claude Code account manager.
+
+Usage:
+  cam                          launch the interactive TUI
+  cam list                     list saved accounts (alias: ls); * marks the active one
+  cam current                  show the active account
+  cam save [label]             capture the current login into the manager
+  cam use <name>               switch the active account (alias: switch)
+  cam refresh <name>           force-refresh a saved account's token
+  cam rm <name>                remove a saved account (alias: remove, delete)
+  cam export [path]            export all saved accounts to a portable file
+  cam import <path> [--force]  import accounts from an exported file
+
+<name> matches an account id, label, or email (a unique substring is enough).
+
+export/import move accounts between machines — e.g. Windows -> macOS. The export
+file holds OAuth tokens: keep it private and delete it once imported.
+"""
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from . import store
 from .models import Account
@@ -73,6 +92,26 @@ def _run(argv: list[str]) -> int:
         a = _resolve(rest[0])
         store.delete_account(a.id)
         print(f"Removed {a.label}.")
+        return 0
+
+    if cmd == "export":
+        dest = Path(rest[0]) if rest else Path.cwd() / "cam-accounts.json"
+        n = store.export_accounts(dest)
+        print(f"Exported {n} account{'' if n == 1 else 's'} to {dest}.")
+        print("This file contains OAuth tokens — keep it private, "
+              "and delete it once you've imported it on the other machine.")
+        return 0
+
+    if cmd == "import":
+        force = any(a in ("--force", "-f") for a in rest)
+        paths = [a for a in rest if not a.startswith("-")]
+        if not paths:
+            sys.exit("usage: cam import <path> [--force]")
+        imported, skipped = store.import_accounts(Path(paths[0]), overwrite=force)
+        msg = f"Imported {imported} account{'' if imported == 1 else 's'}."
+        if skipped:
+            msg += f" Skipped {skipped} already present (use --force to overwrite)."
+        print(msg)
         return 0
 
     print(__doc__)

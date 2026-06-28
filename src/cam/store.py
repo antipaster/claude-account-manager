@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from datetime import datetime
@@ -221,6 +222,85 @@ def delete_account(acct_id: str) -> None:
     p = config.ACCOUNTS_DIR / f"{_safe(acct_id)}.json"
     if p.exists():
         p.unlink()
+
+
+# --- portable export / import ---------------------------------------------------
+# Saved account records are platform-independent: they hold the OAuth tokens and
+# identity verbatim, with no reference to where Claude Code keeps the live creds
+# (file vs. Keychain). That makes them safe to carry between Windows, macOS and
+# Linux — export bundles them into one file, import writes them back.
+EXPORT_VERSION = 1
+
+
+def _restrict_permissions(path: Path) -> None:
+    """Best-effort owner-only lock-down — the file carries live OAuth tokens.
+    No-op where the platform/filesystem ignores POSIX modes (e.g. most of Windows)."""
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def export_accounts(dest: Path) -> int:
+    """Write every saved account to a single portable JSON bundle at `dest`.
+
+    The bundle can be copied to another machine and read back with
+    `import_accounts`, regardless of OS. Returns the number of accounts written.
+    The file contains live OAuth tokens — treat it as a secret."""
+    accounts = [a.to_dict() for a in list_accounts()]
+    bundle = {
+        "cam_export_version": EXPORT_VERSION,
+        "exported_at": _now_iso(),
+        "accounts": accounts,
+    }
+    dest = Path(dest).expanduser()
+    _atomic_write(dest, json.dumps(bundle, ensure_ascii=False, indent=2))
+    _restrict_permissions(dest)
+    return len(accounts)
+
+
+def _extract_records(data) -> list[dict]:
+    """Pull account records out of an exported bundle, a bare list, or a single
+    account record — so imports are forgiving about exactly what they're handed."""
+    if isinstance(data, dict) and isinstance(data.get("accounts"), list):
+        return [r for r in data["accounts"] if isinstance(r, dict)]
+    if isinstance(data, list):
+        return [r for r in data if isinstance(r, dict)]
+    if isinstance(data, dict) and (data.get("id") or data.get("claudeAiOauth")):
+        return [data]
+    return []
+
+
+def import_accounts(src: Path, overwrite: bool = False) -> tuple[int, int]:
+    """Import accounts from a file written by `export_accounts` (also accepts a
+    bare list of records or a single record). Existing accounts are kept unless
+    `overwrite` is set. Returns (imported, skipped)."""
+    src = Path(src).expanduser()
+    if not src.exists():
+        raise CamError(f"No such file: {src}")
+    try:
+        data = _read_json(src)
+    except Exception as exc:
+        raise CamError(f"Could not read {src}: {exc}") from exc
+
+    records = _extract_records(data)
+    if not records:
+        raise CamError(f"No accounts found in {src.name}.")
+
+    imported = skipped = 0
+    for rec in records:
+        acct_id = rec.get("id") or (rec.get("identity") or {}).get("accountUuid")
+        if not acct_id or not rec.get("claudeAiOauth"):
+            skipped += 1
+            continue
+        path = config.ACCOUNTS_DIR / f"{_safe(acct_id)}.json"
+        if path.exists() and not overwrite:
+            skipped += 1
+            continue
+        rec = dict(rec, id=acct_id)
+        _write_record(rec)
+        imported += 1
+    return imported, skipped
 
 
 # --- tokens & login -------------------------------------------------------------

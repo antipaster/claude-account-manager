@@ -98,7 +98,31 @@ cam current
 cam save [label]    # capture the current login
 cam use <name>      # switch by label, email, or id
 cam rm  <name>
+cam export [path]   # write all saved accounts to one portable file
+cam import <path>   # read them back (add --force to overwrite existing)
 ```
+
+## Moving accounts between machines
+
+Saved accounts are plain, platform-independent files — the same record works on
+Windows, macOS, and Linux, because it carries the tokens and identity, not a path to
+wherever Claude Code happens to keep the live login. So moving your logins (say, from a
+Windows PC to a Mac) is two commands:
+
+```
+# on the old machine
+cam export accounts.json
+
+# copy accounts.json across, then on the new machine
+cam import accounts.json
+```
+
+`import` skips accounts you already have unless you pass `--force`. Then `cam use <name>`
+makes one active — on macOS that writes straight into the Keychain, so Claude Code picks
+it up with no extra steps.
+
+> The export file contains live OAuth tokens. Keep it somewhere private and delete it once
+> you've imported it.
 
 ## Layout
 
@@ -111,8 +135,8 @@ src/cam/
   theme.py        color palettes
   config, models, formatting, widgets, screens, cli, styles.tcss
 tests/
-  test_switch_sandbox.py   proves a switch never corrupts ~/.claude.json
-                           (runs on copies, asserts every unrelated key survives)
+  test_export_import.py    round-trips the portable export/import used to move
+                           accounts between machines (runs on a throwaway store)
 ```
 
 ## Notes
